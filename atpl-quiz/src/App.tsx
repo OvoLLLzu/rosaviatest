@@ -130,7 +130,7 @@ function App() {
 
   // Load questions.txt
   useEffect(() => {
-    fetch('/questions.txt')
+    fetch('questions.txt')
       .then((r) => r.text())
       .then(setRaw)
       .catch((e) => setError(String(e)))
