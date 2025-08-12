@@ -1,0 +1,35 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-store/
+
+# Vite/TypeScript
+/dist/
+*.tsbuildinfo
+
+# Local env
+.env
+.env.*.local
+
+# Editor
+.vscode/
+.idea/
+.DS_Store
+
+# Capacitor/Android
+/android/.gradle/
+/android/.idea/
+/android/local.properties
+/android/build/
+/android/app/build/
+/android/capacitor-cordova-android-plugins/build/
+/android/capacitor-android/build/
+
+# Logs
+logs
+*.log
+
+# Misc
+Thumbs.db
