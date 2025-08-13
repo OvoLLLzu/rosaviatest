@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
-import './design/design.css'
+import './theme/mobile.css'
+// import './design/design.css'
 
 // Data structures
 export type AnswerOption = {
