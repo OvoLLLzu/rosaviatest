@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
+import './design/design.css'
 
 // Data structures
 export type AnswerOption = {
@@ -20,21 +21,30 @@ export type SessionQuestionState = {
   isExcluded: boolean
 }
 
+type SessionState = {
+  questionStates: Record<number, SessionQuestionState>
+  currentQuestionId: number | null
+}
+
+type StatsState = {
+  totalAnswers: number
+  correctAnswers: number
+}
+
 const STORAGE_KEYS = {
   session: 'atpl-quiz-session-v1',
   timerStart: 'atpl-quiz-timer-start-v1',
+  stats: 'atpl-quiz-stats-v1',
 }
 
 function parseQuestions(raw: string): Question[] {
-  // Split by separators lines of underscores; keep only non-empty blocks
   const blocks = raw
-    .split(/\n\s*_{35,}\s*\n/g) // lines of underscores surrounded by newlines
+    .split(/\n\s*_{35,}\s*\n/g)
     .map((b) => b.trim())
     .filter((b) => b.length > 0)
 
   const questions: Question[] = []
   for (const block of blocks) {
-    // Extract lines, ignore empty lines
     const lines = block
       .split(/\r?\n/)
       .map((l) => l.trim())
@@ -42,7 +52,6 @@ function parseQuestions(raw: string): Question[] {
 
     if (lines.length < 4) continue
 
-    // First line could be an empty line due to formatting; ensure question line contains number.
     let questionLineIndex = 0
     while (
       questionLineIndex < Math.min(3, lines.length) &&
@@ -58,7 +67,6 @@ function parseQuestions(raw: string): Question[] {
     const qid = Number(idMatch[1])
     const qtext = questionLine.replace(/^(\d+)\s*\.?\s*/, '').trim()
 
-    // The next lines should include exactly 3 options (may include semicolons). Some lines may join; we assume each option is on its own line, optionally ending with ';'.
     const optionLines = lines
       .slice(questionLineIndex + 1)
       .filter((l) => l.length > 0)
@@ -75,7 +83,6 @@ function parseQuestions(raw: string): Question[] {
     questions.push({ id: qid, text: qtext, options })
   }
 
-  // Deduplicate by id keeping first occurrence
   const seen = new Set<number>()
   const deduped: Question[] = []
   for (const q of questions) {
@@ -92,7 +99,6 @@ function usePersistentTimer() {
   const intervalRef = useRef<number | null>(null)
 
   useEffect(() => {
-    // Initialize or reuse start time
     let start = localStorage.getItem(STORAGE_KEYS.timerStart)
     let startMs = start ? Number(start) : NaN
     if (!start || Number.isNaN(startMs)) {
@@ -138,13 +144,7 @@ function App() {
 
   const allQuestions = useMemo(() => (raw ? parseQuestions(raw) : []), [raw])
 
-  // Session state persistence
-  type SessionState = {
-    questionStates: Record<number, SessionQuestionState>
-    currentQuestionId: number | null
-  }
-
-  const { formatted: timeFormatted, reset: resetTimer } = usePersistentTimer()
+  const { formatted: timeFormatted, elapsedMs, reset: resetTimer } = usePersistentTimer()
 
   const [session, setSession] = useState<SessionState>(() => {
     const stored = localStorage.getItem(STORAGE_KEYS.session)
@@ -156,7 +156,14 @@ function App() {
     return { questionStates: {}, currentQuestionId: null }
   })
 
-  // Initialize session question states once questions load
+  const [stats, setStats] = useState<StatsState>(() => {
+    const stored = localStorage.getItem(STORAGE_KEYS.stats)
+    if (stored) {
+      try { return JSON.parse(stored) as StatsState } catch {}
+    }
+    return { totalAnswers: 0, correctAnswers: 0 }
+  })
+
   useEffect(() => {
     if (allQuestions.length === 0) return
     setSession((prev) => {
@@ -170,15 +177,17 @@ function App() {
           }
         }
       }
-      // Do not auto-start the test here; wait for "Начать тест"
       return updated
     })
   }, [allQuestions.length])
 
-  // Persist session
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.session, JSON.stringify(session))
   }, [session])
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.stats, JSON.stringify(stats))
+  }, [stats])
 
   const activeCount = useMemo(() =>
     Object.values(session.questionStates).filter((qs) => !qs.isExcluded).length,
@@ -196,7 +205,6 @@ function App() {
   const [hasAnswered, setHasAnswered] = useState(false)
   const [showExcludedNotice, setShowExcludedNotice] = useState(false)
 
-  // Shuffle options each time question changes
   const displayedOptions = useMemo(() => {
     if (!currentQuestion) return []
     const options = [...currentQuestion.options]
@@ -210,13 +218,12 @@ function App() {
   }, [currentQuestion?.id])
 
   useEffect(() => {
-    // Reset selection when question changes
     setSelectedIdx(null)
     setHasAnswered(false)
     setShowExcludedNotice(false)
   }, [session.currentQuestionId])
 
-  // Keyboard shortcuts: 1/2/3 to answer, Enter to Next
+  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (!currentQuestion) return
@@ -246,6 +253,12 @@ function App() {
 
     const isCorrect = displayedOptions[idx]?.isCorrect === true
 
+    // Update stats
+    setStats((prev) => ({
+      totalAnswers: prev.totalAnswers + 1,
+      correctAnswers: prev.correctAnswers + (isCorrect ? 1 : 0),
+    }))
+
     let excludedNow = false
     setSession((prev) => {
       const qs = prev.questionStates[currentQuestion.id]
@@ -266,7 +279,6 @@ function App() {
 
     if (excludedNow) {
       setShowExcludedNotice(true)
-      // Auto-advance after a short delay when excluded
       setTimeout(() => {
         handleNext()
       }, 800)
@@ -284,12 +296,19 @@ function App() {
   function handleReset() {
     localStorage.removeItem(STORAGE_KEYS.session)
     localStorage.removeItem(STORAGE_KEYS.timerStart)
+    localStorage.removeItem(STORAGE_KEYS.stats)
     setSession({ questionStates: {}, currentQuestionId: null })
+    setStats({ totalAnswers: 0, correctAnswers: 0 })
     resetTimer()
   }
 
-  // Streak for current question
   const currentStreak = currentQuestion ? (session.questionStates[currentQuestion.id]?.consecutiveCorrect || 0) : 0
+  const accuracy = stats.totalAnswers > 0 ? Math.round((stats.correctAnswers / stats.totalAnswers) * 100) : 0
+
+  // Circle timer (decorative 30s loop)
+  const circleLen = 326
+  const loopRatio = (elapsedMs % 30000) / 30000
+  const dashOffset = circleLen * loopRatio
 
   if (error) {
     return <div style={{ padding: 24 }}>Ошибка загрузки: {error}</div>
@@ -303,11 +322,37 @@ function App() {
 
   return (
     <div className="container">
-      <header className="header">
-        <div className="left">Вопросов в сессии: {activeCount} / {totalCount}</div>
-        <div className="right">Время: {timeFormatted}</div>
-      </header>
+      {/* Top bar with mini stats or altimeter+timer depending on state */}
+      {!session.currentQuestionId || isFinished ? (
+        <div className="topbar">
+          <div className="glass-card mini-stats">
+            <div>
+              <span className="label">Время</span>
+              <span className="value">{timeFormatted}</span>
+            </div>
+            <div>
+              <span className="label">Точность</span>
+              <span className="value">{accuracy}%</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="topbar row">
+          <div className="glass-card altimeter">
+            <div className="alt-label">Осталось</div>
+            <div className="alt-value">{activeCount}/{totalCount}</div>
+          </div>
+          <div className="glass-card timer">
+            <svg viewBox="0 0 120 120" className="timer-svg">
+              <circle cx="60" cy="60" r="52" className="timer-bg" />
+              <circle cx="60" cy="60" r="52" className="timer-fg" style={{ strokeDashoffset: dashOffset }} />
+              <text x="60" y="66" textAnchor="middle" className="timer-text">{timeFormatted}</text>
+            </svg>
+          </div>
+        </div>
+      )}
 
+      {/* Progress */}
       <div className="progress">
         <div className="progress-bar" style={{ width: `${progressPercent}%` }} />
         <div className="progress-text">{completedCount}/{totalCount}</div>
@@ -316,48 +361,110 @@ function App() {
       <main className="content">
         {!session.currentQuestionId || isFinished ? (
           <div className="center">
-            <h1 className="title">Тест на ATPL</h1>
-            {isFinished ? (
-              <p>Тестирование завершено. Все вопросы исключены.</p>
+            {/* Home or Finish */}
+            {!isFinished ? (
+              <>
+                <div className="center-logo">
+                  <div className="logo-plane">
+                    <svg width="140" height="140" viewBox="0 0 164 164">
+                      <defs>
+                        <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+                          <stop offset="0%" stopColor="#1A3A6C" />
+                          <stop offset="100%" stopColor="#4A6FA5" />
+                        </linearGradient>
+                      </defs>
+                      <circle cx="82" cy="82" r="78" fill="url(#g1)" opacity="0.15" />
+                      <path d="M82 20 L98 82 L82 76 L66 82 Z" fill="#fff" opacity="0.9" />
+                      <path d="M82 76 L120 96 L82 90 L44 96 Z" fill="#fff" opacity="0.9" />
+                    </svg>
+                    <div className="brand">ATPL TEST</div>
+                  </div>
+                </div>
+                <div className="actions-col" style={{ position: 'static' }}>
+                  <button className="btn primary breath" onClick={() => {
+                    setSession((prev) => {
+                      const nextId = pickNextQuestionId(allQuestions, prev.questionStates)
+                      return { ...prev, currentQuestionId: nextId }
+                    })
+                  }}>Начать тест</button>
+                  <button className="btn danger subtle" onClick={handleReset}>Сбросить прогресс</button>
+                  <div className="stages">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} className={`stage ${progressPercent >= (i+1)*20 ? 'active' : ''}`} />
+                    ))}
+                  </div>
+                </div>
+              </>
             ) : (
-              <p>Нажмите «Начать тест», чтобы начать.</p>
+              <>
+                <div className="landing">
+                  <div className="runway" />
+                  <div className="plane-anim" />
+                </div>
+                <div className="finish-title">Тест завершен!</div>
+                <div className="stats-grid">
+                  <div className="glass-card stat big-clock">
+                    <div className="clock-face">
+                      <div className="hand h1" />
+                      <div className="hand h2" />
+                      <div className="center" />
+                    </div>
+                    <div className="clock-text">{timeFormatted}</div>
+                  </div>
+                  <div className="glass-card stat path">
+                    <div className="path-chart">
+                      <svg viewBox="0 0 240 80">
+                        <polyline points="0,60 40,50 80,55 120,35 160,30 200,20 240,25" className="path-line" />
+                        <circle cx="0" cy="60" r="3" className="path-dot" />
+                        <circle cx="120" cy="35" r="3" className="path-dot" />
+                        <circle cx="240" cy="25" r="3" className="path-dot" />
+                      </svg>
+                    </div>
+                    <div className="path-label">Траектория успеваемости</div>
+                  </div>
+                  <div className="glass-card stat report">
+                    <div className="report-row"><span>Точность</span><span>{accuracy}%</span></div>
+                    <div className="report-row"><span>Ответов</span><span>{stats.totalAnswers}</span></div>
+                    <div className="report-row"><span>Исключено</span><span>{completedCount}</span></div>
+                  </div>
+                </div>
+                <div className="finish-actions">
+                  <button className="btn primary" onClick={() => setSession((prev) => ({ ...prev, currentQuestionId: pickNextQuestionId(allQuestions, prev.questionStates) }))}>Новый тест</button>
+                  <button className="btn secondary" onClick={handleReset}>Сбросить прогресс</button>
+                </div>
+              </>
             )}
-            <div className="actions">
-              {!isFinished && (
-                <button className="primary" onClick={() => {
-                  setSession((prev) => {
-                    const nextId = pickNextQuestionId(allQuestions, prev.questionStates)
-                    return { ...prev, currentQuestionId: nextId }
-                  })
-                }}>Начать тест</button>
-              )}
-              <button className="secondary" onClick={handleReset}>Сбросить прогресс</button>
-            </div>
           </div>
         ) : (
-          <div className="question-card">
-            <div className="question-head">
-              <div className="question-text">
-                {currentQuestion?.id}. {currentQuestion?.text}
+          <div>
+            <div className="glass-card question-card glass">
+              <div className="question-head">
+                <div>
+                  <div className="q-marker">
+                    <span className="pin" />
+                    <span className="q-num">{currentQuestion?.id}</span>
+                  </div>
+                  <div className="q-text">{currentQuestion?.text}</div>
+                </div>
+                <div className="streak" title="5 подряд для исключения">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <span key={i} className={i < currentStreak ? 'dot filled' : 'dot'} />
+                  ))}
+                </div>
               </div>
-              <div className="streak" title="5 подряд для исключения">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <span key={i} className={i < currentStreak ? 'dot filled' : 'dot'} />
-                ))}
-              </div>
+              {showExcludedNotice && (
+                <div className="notice excluded">Вопрос исключён из сессии</div>
+              )}
             </div>
-            {showExcludedNotice && (
-              <div className="notice excluded">Вопрос исключён из сессии</div>
-            )}
-            <div className="answers">
+
+            <div className="answers-col">
               {displayedOptions.map((opt, idx) => {
                 const isSelected = selectedIdx === idx
                 const isCorrectSelected = hasAnswered && isSelected && opt.isCorrect
                 const isIncorrectSelected = hasAnswered && isSelected && !opt.isCorrect
                 const className = [
-                  'answer',
-                  isSelected ? 'selected' : '',
-                  isCorrectSelected ? 'correct' : '',
+                  'answer-btn',
+                  isCorrectSelected ? 'correct animate-ok' : '',
                   isIncorrectSelected ? 'incorrect' : '',
                 ].join(' ')
                 const label = idx === 0 ? 'A' : idx === 1 ? 'B' : 'C'
@@ -368,15 +475,23 @@ function App() {
                     onClick={() => handleAnswer(idx)}
                     disabled={hasAnswered}
                   >
-                    <span className="badge">{label}</span>
+                    <span className="label">{label}</span>
                     <span>{opt.text}</span>
+                    {isCorrectSelected && <span className="ico ok" />}
                   </button>
-                )
-              })}
+                )}
+              )}
             </div>
-            <div className="actions">
-              <button className="primary" onClick={handleNext} disabled={!hasAnswered}>Далее ↵</button>
-              <button className="secondary" onClick={handleReset}>Сбросить прогресс</button>
+
+            <div className="bottom">
+              <button className="btn primary glow" onClick={handleNext} disabled={!hasAnswered}>Далее ↵</button>
+              <div className="route">
+                <div className="dot" />
+                <div className="line" />
+                <div className="dot" />
+                <div className="line" />
+                <div className="dot active" />
+              </div>
             </div>
           </div>
         )}
