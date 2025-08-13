@@ -101,6 +101,36 @@ body { background: linear-gradient(180deg, var(--bg1), var(--bg2)); }
 .modal-body { padding: 12px; display: grid; gap: 8px; }
 .modal-actions { display: grid; grid-auto-flow: column; gap: 8px; justify-content: end; padding: 12px; }
 
+/* Responsive improvements */
+.topbar, .topbar.row { flex-wrap: wrap; }
+.topbar .glass-card { flex: 1 1 auto; min-width: 120px; }
+.top-actions { margin-left: auto; flex-wrap: wrap; }
+.btn.small { padding: 0 10px; }
+
+/* Shrink timer for small screens */
+.timer-svg { width: clamp(56px, 20vw, 100px); height: clamp(56px, 20vw, 100px); }
+.timer-bg, .timer-fg { stroke-width: 5; }
+.timer-text { font-size: clamp(9px, 2.6vw, 13px); }
+
+/* Center logo constraints */
+.center-logo svg { width: clamp(72px, 25vw, 120px); height: auto; }
+
+/* Text wrapping */
+.q-text, .answer-btn span { overflow-wrap: anywhere; word-break: break-word; }
+.answer-btn { width: 100%; }
+
+/* Stages smaller */
+.stage { width: 16vw; max-width: 64px; }
+
+/* Very narrow screens adjustments */
+@media (max-width: 360px) {
+  .mini-stats { gap: 8px; padding: 8px; }
+  .altimeter { padding: 6px 8px; }
+  .btn.small { height: 32px; font-size: 11px; }
+  .answers-col { gap: 8px; }
+  .answer-btn { padding: 10px; min-height: 46px; }
+}
+
 @media (min-width: 600px) {
   .container { max-width: 520px; margin: 0 auto; border-radius: 16px; }
 }
