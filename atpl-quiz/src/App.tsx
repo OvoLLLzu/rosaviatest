@@ -205,6 +205,7 @@ function App() {
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
   const [hasAnswered, setHasAnswered] = useState(false)
   const [showExcludedNotice, setShowExcludedNotice] = useState(false)
+  const [showStats, setShowStats] = useState(false)
 
   const displayedOptions = useMemo(() => {
     if (!currentQuestion) return []
@@ -323,7 +324,6 @@ function App() {
 
   return (
     <div className="container">
-      {/* Top bar with mini stats or altimeter+timer depending on state */}
       {!session.currentQuestionId || isFinished ? (
         <div className="topbar">
           <div className="glass-card mini-stats">
@@ -336,12 +336,21 @@ function App() {
               <span className="value">{accuracy}%</span>
             </div>
           </div>
+          <div className="top-actions">
+            <button className="btn secondary small" onClick={() => setShowStats(true)}>Статистика</button>
+            <button className="btn danger small" onClick={handleReset}>Сброс</button>
+          </div>
         </div>
       ) : (
         <div className="topbar row">
           <div className="glass-card altimeter">
             <div className="alt-label">Осталось</div>
             <div className="alt-value">{activeCount}/{totalCount}</div>
+          </div>
+          <div className="top-actions">
+            <button className="btn secondary small" onClick={() => setSession((prev) => ({ ...prev, currentQuestionId: null }))}>Главное меню</button>
+            <button className="btn secondary small" onClick={() => setShowStats(true)}>Статистика</button>
+            <button className="btn danger small" onClick={handleReset}>Сброс</button>
           </div>
           <div className="glass-card timer">
             <svg viewBox="0 0 120 120" className="timer-svg">
@@ -497,6 +506,22 @@ function App() {
           </div>
         )}
       </main>
+      {showStats && (
+        <div className="overlay" onClick={() => setShowStats(false)}>
+          <div className="glass-card modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-body">
+              <div className="title">Статистика</div>
+              <div>Ответов всего: {stats.totalAnswers}</div>
+              <div>Правильных: {stats.correctAnswers}</div>
+              <div>Точность: {accuracy}%</div>
+              <div>Исключено вопросов: {completedCount}</div>
+            </div>
+            <div className="modal-actions">
+              <button className="btn secondary small" onClick={() => setShowStats(false)}>Закрыть</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

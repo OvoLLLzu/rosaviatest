@@ -90,6 +90,17 @@ body { background: linear-gradient(180deg, var(--bg1), var(--bg2)); }
 .route .dot.active { background: #fff; }
 .route .line { width: 60px; height: 2px; background: rgba(255,255,255,0.5); }
 
+/* Top action buttons */
+.top-actions { display: flex; gap: 8px; align-items: center; }
+.btn.small { height: 36px; padding: 0 12px; font-size: 12px; border-radius: 999px; }
+
+/* Overlays / Modals */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 50; }
+.modal-card { width: 100%; max-width: 520px; }
+.modal-card .title { font-size: 18px; font-weight: 800; margin: 0 0 8px; }
+.modal-body { padding: 12px; display: grid; gap: 8px; }
+.modal-actions { display: grid; grid-auto-flow: column; gap: 8px; justify-content: end; padding: 12px; }
+
 @media (min-width: 600px) {
   .container { max-width: 520px; margin: 0 auto; border-radius: 16px; }
 }
